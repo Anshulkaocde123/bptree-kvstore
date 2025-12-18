@@ -1,0 +1,23 @@
+# Build artifacts
+build/
+bptree_kvstore
+*.o
+*.out
+
+# Database files
+*.db
+test.db
+test_persist.db
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+test_persistence

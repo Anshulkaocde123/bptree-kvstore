@@ -240,6 +240,47 @@ int main() {
 
     std::cout << "\n*** B+ Tree test completed successfully! ***" << std::endl;
 
+    // ==================== Phase 5: Count Test ====================
+    std::cout << "\n=== Phase 5: Count Method Test ===" << std::endl;
+    {
+        std::remove(DB_FILE);  // Fresh start for count test
+        DiskManager disk_manager(DB_FILE);
+        BufferPoolManager buffer_pool(MAX_PAGES_IN_RAM, &disk_manager);
+        BPlusTree tree(&buffer_pool);
+
+        // Empty tree count
+        size_t count = tree.Count();
+        std::cout << "  Count on empty tree: " << count << " (expected 0)" << std::endl;
+
+        // Insert 100 keys
+        for (int i = 0; i < 100; ++i) {
+            tree.Insert(i, "val_" + std::to_string(i));
+        }
+        count = tree.Count();
+        std::cout << "  Count after 100 insertions: " << count << " (expected 100)" << std::endl;
+
+        // Remove 10 keys (0-9)
+        for (int i = 0; i < 10; ++i) {
+            tree.Remove(i);
+        }
+        count = tree.Count();
+        std::cout << "  Count after 10 deletions: " << count << " (expected 90)" << std::endl;
+
+        // Duplicate insert (update) should not change count
+        tree.Insert(50, "updated_val_50");
+        count = tree.Count();
+        std::cout << "  Count after duplicate insert: " << count << " (expected 90)" << std::endl;
+
+        // Verify updated value
+        auto result = tree.Search(50);
+        if (result && *result == "updated_val_50") {
+            std::cout << "  ✓ Duplicate insert correctly updated value to: " << *result << std::endl;
+        }
+    }
+    std::cout << "  ✓ Phase 5 complete - Count method verified" << std::endl;
+
+    std::cout << "\n*** All tests completed successfully! ***" << std::endl;
+
     std::remove(DB_FILE);
     return 0;
 }

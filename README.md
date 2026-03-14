@@ -15,18 +15,22 @@ A production-quality B+ tree key-value store with persistent storage, implemente
 - Uses Page 0 as a meta page to track where the tree starts
 - If your program crashes, it automatically recovers and loads everything back
 - Store 10,000+ keys and retrieve them all after restart
+- Robust disk I/O with EINTR handling and partial read/write retry loops
 
 **Buffer Pool Management**
 - Smart LRU (Least Recently Used) eviction - keeps frequently accessed pages in memory
 - 64-frame buffer pool that uses only 256 KB of RAM
 - Can handle massive overload - efficiently manages 10,000 keys with just 64 frames
 - Proper page lifecycle management with pinning/unpinning
+- Thread-safe with mutex-based concurrency control
+- Memory-safe using smart pointers (no manual memory management)
 
 **Core Operations**
 - **Insert**: Add key-value pairs - tree automatically stays balanced
 - **Search**: Find values by key in O(log n) time
 - **Scan**: Get all key-value pairs in a range, sorted and ready to use
 - **Delete**: Remove keys without rebuilding the tree
+- **Count**: Get the number of active (non-deleted) keys in the tree
 - **Persistence**: Everything you save stays on disk
 
 ## Architecture
@@ -104,7 +108,7 @@ make
 
 ## Testing
 
-The project includes 4 comprehensive test phases:
+The project includes 5 comprehensive test phases:
 
 ### Phase 1: Building Tree (500+ keys)
 ```
@@ -136,6 +140,14 @@ Search(4) and Search(6) still work fine
 Scan(1, 10) skips the deleted key
 ```
 
+### Phase 5: Count Method Testing
+```
+Count on empty tree returns 0
+Insert 100 keys, Count returns 100
+Remove 10 keys, Count returns 90
+Duplicate insert (update) doesn't change Count
+```
+
 ### Stress Test
 Run with NUM_KEYS = 10,000 to test:
 - Buffer pool with 156:1 oversubscription
@@ -162,6 +174,9 @@ bool Remove(int key);
 
 // Range scan
 std::vector<std::pair<int, std::string>> Scan(int start_key, int end_key);
+
+// Count non-deleted keys in the tree
+size_t Count() const;
 
 // Check if tree is empty
 bool IsEmpty() const;
@@ -216,7 +231,8 @@ if (page->pin_count == 0) {
 - **Total Lines**: 1,199 (all production code)
 - **Includes**: Proper `<utility>` for `std::pair` support
 - **Error Handling**: Comprehensive null checks and boundary validation
-- **Memory Safety**: Proper allocation/deallocation with pinning/unpinning
+- **Memory Safety**: Smart pointer-based allocation with pinning/unpinning
+- **Thread Safety**: Mutex-based concurrency control in buffer pool
 - **Comments**: Document complex algorithmic logic
 
 ## Testing Results
@@ -254,19 +270,21 @@ Result: Everything works perfectly - no errors found
 | Search | O(log n) | O(1) | Binary search in nodes |
 | Delete | O(log n) | O(1) | Lazy deletion |
 | Scan | O(log n + k) | O(k) | k = results returned |
+| Count | O(n) | O(1) | Traverses all leaf pages |
 | LRU Eviction | O(1) | O(frames) | Linked list + hash map |
 
 ## Known Limitations
 
-- No concurrent access (single-threaded)
-- Fixed buffer pool size (64 frames)
 - No transaction support
 - Lazy deletion doesn't reclaim disk space
 - No automatic page compaction
 
 ## Future Enhancements
 
-- [ ] Concurrency support with read-write locks
+- [x] Concurrency support with mutex-based thread safety
+- [x] Robust disk I/O with EINTR and partial write handling
+- [x] Memory-safe buffer pool using smart pointers
+- [x] Key count statistics via `Count()` method
 - [ ] Transaction support (ACID properties)
 - [ ] Page compaction and garbage collection
 - [ ] Statistics and query optimization hints

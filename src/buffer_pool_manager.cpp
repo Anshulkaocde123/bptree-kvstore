@@ -2,8 +2,8 @@
 #include <algorithm>
 
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager)
-    : pool_size_(pool_size), disk_manager_(disk_manager) {
-    pages_ = new Page[pool_size_];
+    : pool_size_(pool_size), disk_manager_(disk_manager),
+      pages_(std::make_unique<Page[]>(pool_size)) {
     for (size_t i = 0; i < pool_size_; ++i) {
         free_list_.push_back(i);
     }
@@ -11,10 +11,11 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 
 BufferPoolManager::~BufferPoolManager() {
     FlushAllPages();
-    delete[] pages_;
 }
 
 Page *BufferPoolManager::FetchPage(int page_id) {
+    std::lock_guard<std::mutex> lock(latch_);
+
     // Check if page is already in buffer pool
     auto it = page_table_.find(page_id);
     if (it != page_table_.end()) {
@@ -57,6 +58,8 @@ Page *BufferPoolManager::FetchPage(int page_id) {
 }
 
 bool BufferPoolManager::UnpinPage(int page_id, bool is_dirty) {
+    std::lock_guard<std::mutex> lock(latch_);
+
     auto it = page_table_.find(page_id);
     if (it == page_table_.end()) {
         return false;
@@ -84,6 +87,8 @@ bool BufferPoolManager::UnpinPage(int page_id, bool is_dirty) {
 }
 
 bool BufferPoolManager::FlushPage(int page_id) {
+    std::lock_guard<std::mutex> lock(latch_);
+
     auto it = page_table_.find(page_id);
     if (it == page_table_.end()) {
         return false;
@@ -97,6 +102,8 @@ bool BufferPoolManager::FlushPage(int page_id) {
 }
 
 Page *BufferPoolManager::NewPage(int *page_id) {
+    std::lock_guard<std::mutex> lock(latch_);
+
     size_t frame_id = FindVictimPage();
     if (frame_id == pool_size_) {
         return nullptr;
@@ -123,6 +130,8 @@ Page *BufferPoolManager::NewPage(int *page_id) {
 }
 
 bool BufferPoolManager::DeletePage(int page_id) {
+    std::lock_guard<std::mutex> lock(latch_);
+
     auto it = page_table_.find(page_id);
     if (it == page_table_.end()) {
         return true;  // Page not in pool
@@ -151,6 +160,8 @@ bool BufferPoolManager::DeletePage(int page_id) {
 }
 
 void BufferPoolManager::FlushAllPages() {
+    std::lock_guard<std::mutex> lock(latch_);
+
     for (auto &[page_id, frame_id] : page_table_) {
         Page *page = &pages_[frame_id];
         if (page->is_dirty) {

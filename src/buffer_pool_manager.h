@@ -4,6 +4,8 @@
 #include "config.h"
 #include "disk_manager.h"
 #include <list>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 
 struct Page {
@@ -29,11 +31,13 @@ public:
 private:
     size_t pool_size_;
     DiskManager *disk_manager_;
-    Page *pages_;
+    std::unique_ptr<Page[]> pages_;
     std::unordered_map<int, size_t> page_table_;
     std::list<size_t> free_list_;
     std::list<size_t> lru_list_;
     std::unordered_map<size_t, std::list<size_t>::iterator> lru_map_;
+
+    mutable std::mutex latch_;
 
     size_t FindVictimPage();
 };

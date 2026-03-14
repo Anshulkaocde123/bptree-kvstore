@@ -61,6 +61,7 @@ public:
     bool Remove(int key);
     std::optional<std::string> Search(int key);
     std::vector<std::pair<int, std::string>> Scan(int start_key, int end_key);
+    size_t Count() const;
 
     bool IsEmpty() const { return root_page_id_ == INVALID_PAGE_ID; }
 
@@ -83,6 +84,7 @@ private:
 
     // Tree operations
     Page *FindLeafPage(int key);
+    Page *FindLeftmostLeaf();
     void InsertIntoParent(Page *left_page, int key, Page *right_page);
     void SplitLeaf(Page *leaf_page, int key, const std::string &value);
     void SplitInternal(Page *internal_page, int key, int right_child_id);

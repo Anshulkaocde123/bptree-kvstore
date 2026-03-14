@@ -101,6 +101,28 @@ int BPlusTree::InternalFindChild(Page *page, int key) {
 
 // ==================== Search ====================
 
+Page *BPlusTree::FindLeftmostLeaf() {
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        return nullptr;
+    }
+
+    Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+    if (!page) return nullptr;
+
+    BPlusTreePageHeader *header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
+
+    while (header->page_type == PageType::INTERNAL) {
+        int *children = GetInternalChildren(page);
+        int child_page_id = children[0];
+        buffer_pool_manager_->UnpinPage(page->page_id, false);
+        page = buffer_pool_manager_->FetchPage(child_page_id);
+        if (!page) return nullptr;
+        header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
+    }
+
+    return page;
+}
+
 Page *BPlusTree::FindLeafPage(int key) {
     if (root_page_id_ == INVALID_PAGE_ID) {
         return nullptr;
@@ -291,9 +313,9 @@ void BPlusTree::SplitInternal(Page *internal_page, int key, int right_child_id) 
     int *old_keys = GetInternalKeys(internal_page);
     int n = old_header->num_keys;
 
-    // Create temporary arrays
-    int temp_keys[INTERNAL_MAX_KEYS + 1];
-    int temp_children[INTERNAL_MAX_KEYS + 2];
+    // Create temporary arrays (zero-initialized)
+    int temp_keys[INTERNAL_MAX_KEYS + 1] = {};
+    int temp_children[INTERNAL_MAX_KEYS + 2] = {};
 
     // Find position to insert
     int idx = 0;
@@ -535,4 +557,53 @@ std::vector<std::pair<int, std::string>> BPlusTree::Scan(int start_key, int end_
     }
 
     return results;
+}
+
+// ==================== Count ====================
+
+size_t BPlusTree::Count() const {
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        return 0;
+    }
+
+    size_t count = 0;
+
+    // Navigate to the leftmost leaf
+    Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+    if (!page) return 0;
+
+    BPlusTreePageHeader *header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
+
+    while (header->page_type == PageType::INTERNAL) {
+        int *children = reinterpret_cast<int *>(page->data + INTERNAL_HEADER_SIZE);
+        int child_page_id = children[0];
+        buffer_pool_manager_->UnpinPage(page->page_id, false);
+        page = buffer_pool_manager_->FetchPage(child_page_id);
+        if (!page) return count;
+        header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
+    }
+
+    // Traverse all leaf pages via linked list
+    while (page) {
+        LeafPageHeader *leaf_header = reinterpret_cast<LeafPageHeader *>(page->data);
+        LeafEntry *entries = reinterpret_cast<LeafEntry *>(page->data + LEAF_HEADER_SIZE);
+
+        for (int i = 0; i < leaf_header->base.num_keys; ++i) {
+            // Only count non-deleted entries (lazy deletion: empty value means deleted)
+            if (entries[i].value[0] != '\0') {
+                count++;
+            }
+        }
+
+        int next_page_id = leaf_header->next_page_id;
+        buffer_pool_manager_->UnpinPage(page->page_id, false);
+
+        if (next_page_id == INVALID_PAGE_ID) {
+            break;
+        }
+
+        page = buffer_pool_manager_->FetchPage(next_page_id);
+    }
+
+    return count;
 }

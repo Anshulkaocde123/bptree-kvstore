@@ -1,5 +1,6 @@
 #include "disk_manager.h"
 
+#include <cerrno>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
@@ -25,30 +26,59 @@ DiskManager::~DiskManager() {
 }
 
 void DiskManager::ReadPage(int page_id, char *page_data) {
+    if (page_id < 0) {
+        throw std::runtime_error("Invalid page id: " + std::to_string(page_id));
+    }
+
     off_t offset = static_cast<off_t>(page_id) * PAGE_SIZE;
     if (lseek(fd_, offset, SEEK_SET) < 0) {
         throw std::runtime_error("Failed to seek to page " + std::to_string(page_id));
     }
 
-    ssize_t bytes_read = read(fd_, page_data, PAGE_SIZE);
-    if (bytes_read < 0) {
-        throw std::runtime_error("Failed to read page " + std::to_string(page_id));
-    }
-
-    if (bytes_read < static_cast<ssize_t>(PAGE_SIZE)) {
-        std::memset(page_data + bytes_read, 0, PAGE_SIZE - bytes_read);
+    // Handle partial reads and EINTR by retrying in a loop
+    size_t bytes_remaining = PAGE_SIZE;
+    char *dest = page_data;
+    while (bytes_remaining > 0) {
+        ssize_t bytes_read = read(fd_, dest, bytes_remaining);
+        if (bytes_read < 0) {
+            if (errno == EINTR) {
+                continue;  // Retry on interrupt
+            }
+            throw std::runtime_error("Failed to read page " + std::to_string(page_id));
+        }
+        if (bytes_read == 0) {
+            // EOF reached: zero-fill the rest of the page
+            std::memset(dest, 0, bytes_remaining);
+            break;
+        }
+        dest += bytes_read;
+        bytes_remaining -= static_cast<size_t>(bytes_read);
     }
 }
 
 void DiskManager::WritePage(int page_id, const char *page_data) {
+    if (page_id < 0) {
+        throw std::runtime_error("Invalid page id: " + std::to_string(page_id));
+    }
+
     off_t offset = static_cast<off_t>(page_id) * PAGE_SIZE;
     if (lseek(fd_, offset, SEEK_SET) < 0) {
         throw std::runtime_error("Failed to seek to page " + std::to_string(page_id));
     }
 
-    ssize_t bytes_written = write(fd_, page_data, PAGE_SIZE);
-    if (bytes_written != static_cast<ssize_t>(PAGE_SIZE)) {
-        throw std::runtime_error("Failed to write page " + std::to_string(page_id));
+    // Handle partial writes and EINTR by retrying in a loop
+    size_t bytes_remaining = PAGE_SIZE;
+    const char *src = page_data;
+    while (bytes_remaining > 0) {
+        ssize_t bytes_written = write(fd_, src, bytes_remaining);
+        if (bytes_written < 0) {
+            if (errno == EINTR) {
+                continue;  // Retry on interrupt
+            }
+            throw std::runtime_error("Failed to write page " + std::to_string(page_id));
+        }
+        src += bytes_written;
+        bytes_remaining -= static_cast<size_t>(bytes_written);
     }
 }
 

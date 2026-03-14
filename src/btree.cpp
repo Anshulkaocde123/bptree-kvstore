@@ -561,32 +561,21 @@ std::vector<std::pair<int, std::string>> BPlusTree::Scan(int start_key, int end_
 
 // ==================== Count ====================
 
-size_t BPlusTree::Count() const {
+size_t BPlusTree::Count() {
     if (root_page_id_ == INVALID_PAGE_ID) {
         return 0;
     }
 
     size_t count = 0;
 
-    // Navigate to the leftmost leaf
-    Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+    // Navigate to the leftmost leaf using existing helper
+    Page *page = FindLeftmostLeaf();
     if (!page) return 0;
-
-    BPlusTreePageHeader *header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
-
-    while (header->page_type == PageType::INTERNAL) {
-        int *children = reinterpret_cast<int *>(page->data + INTERNAL_HEADER_SIZE);
-        int child_page_id = children[0];
-        buffer_pool_manager_->UnpinPage(page->page_id, false);
-        page = buffer_pool_manager_->FetchPage(child_page_id);
-        if (!page) return count;
-        header = reinterpret_cast<BPlusTreePageHeader *>(page->data);
-    }
 
     // Traverse all leaf pages via linked list
     while (page) {
-        LeafPageHeader *leaf_header = reinterpret_cast<LeafPageHeader *>(page->data);
-        LeafEntry *entries = reinterpret_cast<LeafEntry *>(page->data + LEAF_HEADER_SIZE);
+        LeafPageHeader *leaf_header = GetLeafHeader(page);
+        LeafEntry *entries = GetLeafEntries(page);
 
         for (int i = 0; i < leaf_header->base.num_keys; ++i) {
             // Only count non-deleted entries (lazy deletion: empty value means deleted)

@@ -61,7 +61,7 @@ public:
     bool Remove(int key);
     std::optional<std::string> Search(int key);
     std::vector<std::pair<int, std::string>> Scan(int start_key, int end_key);
-    size_t Count() const;
+    size_t Count();
 
     bool IsEmpty() const { return root_page_id_ == INVALID_PAGE_ID; }
 
